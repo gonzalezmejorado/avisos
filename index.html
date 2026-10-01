@@ -41,6 +41,8 @@
 <div class="paso" id="activar" hidden>
   <div id="estado">Avisos sin activar</div>
   <button id="btnActivar">Activar avisos</button>
+  <button id="btnProbar" class="sec">Probar notificación aquí</button>
+  <div id="prueba" style="margin-top:8px;color:var(--mu);font-size:14px"></div>
 </div>
 
 <div class="paso" id="codigo" hidden>
@@ -87,6 +89,16 @@ $("btnActivar").onclick = async () => {
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: aBytes(CLAVE_PUBLICA) });
     estado("Avisos activados ✓", "ok"); mostrarCodigo(sub);
   } catch (e) { estado("Error: " + e.message, "er"); }
+};
+// Diagnóstico: muestra una notificación desde el propio iPhone, sin pasar por Apple.
+$("btnProbar").onclick = async () => {
+  const p = $("prueba");
+  try {
+    p.textContent = "Permiso: " + Notification.permission + " · mostrando…";
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification("Prueba local", { body: "Si ves esto, los permisos del iPhone están bien", icon: "icono-192.png" });
+    p.textContent = "Permiso: " + Notification.permission + " · notificación enviada (bloquea el teléfono o baja el Centro de notificaciones)";
+  } catch (e) { p.textContent = "Error: " + e.message; }
 };
 $("btnCompartir").onclick = async () => {
   try { await navigator.share({ text: $("txt").value }); } catch (_) {}
