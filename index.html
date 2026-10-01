@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avisos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icono-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Avisos">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#12161e">
+<style>
+  :root { --bg:#12161e; --tx:#e8e6e1; --mu:#9aa0aa; --ac:#e9c46a; --ok:#7bc47f; --er:#e76f51; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--tx); font:17px/1.45 -apple-system, system-ui, sans-serif;
+         padding:calc(env(safe-area-inset-top) + 28px) 20px 40px; }
+  h1 { font-size:26px; margin:0 0 6px; }
+  p { color:var(--mu); margin:0 0 18px; }
+  .paso { background:#1b212c; border-radius:14px; padding:16px; margin:0 0 14px; }
+  button { width:100%; font:600 17px -apple-system, system-ui, sans-serif; padding:15px; border:0; border-radius:12px;
+           background:var(--ac); color:#12161e; margin-top:10px; }
+  button.sec { background:#2a3240; color:var(--tx); }
+  textarea { width:100%; height:120px; margin-top:10px; background:#0d1016; color:var(--tx); border:1px solid #2a3240;
+             border-radius:10px; padding:10px; font:12px ui-monospace, monospace; }
+  #estado { font-weight:600; }
+  .ok { color:var(--ok); } .er { color:var(--er); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<h1>Avisos</h1>
+<p>Para que Claude te avise en este iPhone.</p>
+
+<div class="paso" id="instalar" hidden>
+  <strong>Primero, instálala:</strong>
+  <p style="margin:8px 0 0">Toca <b>Compartir</b> (el cuadro con la flecha) → <b>Añadir a pantalla de inicio</b>.
+  Luego abre el ícono «Avisos» desde tu pantalla de inicio.</p>
+</div>
+
+<div class="paso" id="activar" hidden>
+  <div id="estado">Avisos sin activar</div>
+  <button id="btnActivar">Activar avisos</button>
+</div>
+
+<div class="paso" id="codigo" hidden>
+  <strong>Pásale este código a Claude</strong>
+  <p style="margin:8px 0 0">Compártelo como prefieras (WhatsApp a ti mismo, correo, Notas) y pégalo en la conversación.</p>
+  <textarea id="txt" readonly></textarea>
+  <button id="btnCompartir">Compartir código</button>
+  <button id="btnCopiar" class="sec">Copiar</button>
+</div>
+
+<script>
+const CLAVE_PUBLICA = "BCZYinwvCV2Uy16QTCdWm2x1rrGnS7XyjatYvl8YxSrwF6l5T_bIYx_6lradPDudQoo0oTnuDQF188SUE_WWOqs";
+const $ = (id) => document.getElementById(id);
+const instalada = window.navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+
+function aBytes(b64) {
+  const s = atob((b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+function estado(t, cls) { $("estado").textContent = t; $("estado").className = cls || ""; }
+function mostrarCodigo(sub) { $("txt").value = JSON.stringify(sub); $("codigo").hidden = false; }
+
+async function iniciar() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (!instalada) { $("instalar").hidden = false; return; }
+    $("activar").hidden = false; estado("Este iPhone no admite avisos web (hace falta iOS 16.4 o más reciente).", "er");
+    $("btnActivar").hidden = true; return;
+  }
+  const reg = await navigator.serviceWorker.register("sw.js", { scope: "./" });
+  if (!instalada) { $("instalar").hidden = false; return; }
+  $("activar").hidden = false;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub && Notification.permission === "granted") {
+    estado("Avisos activados ✓", "ok"); $("btnActivar").textContent = "Volver a mostrar el código"; mostrarCodigo(sub);
+  }
+}
+
+$("btnActivar").onclick = async () => {
+  try {
+    const permiso = await Notification.requestPermission();
+    if (permiso !== "granted") { estado("Permiso denegado. Actívalo en Ajustes → Notificaciones → Avisos.", "er"); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: aBytes(CLAVE_PUBLICA) });
+    estado("Avisos activados ✓", "ok"); mostrarCodigo(sub);
+  } catch (e) { estado("Error: " + e.message, "er"); }
+};
+$("btnCompartir").onclick = async () => {
+  try { await navigator.share({ text: $("txt").value }); } catch (_) {}
+};
+$("btnCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("txt").value); $("btnCopiar").textContent = "Copiado ✓"; }
+  catch (_) { $("txt").select(); }
+};
+iniciar();
+</script>
+</body>
+</html>
