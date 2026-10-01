@@ -26,11 +26,22 @@
   #estado { font-weight:600; }
   .ok { color:var(--ok); } .er { color:var(--er); }
   [hidden] { display:none !important; }
+  #lista { list-style:none; margin:10px 0 0; padding:0; max-height:55vh; overflow-y:auto; }
+  #lista li { padding:10px 0; border-bottom:1px solid #2a3240; }
+  #lista li:last-child { border-bottom:0; }
+  #lista .hora { display:block; color:var(--ac); font-size:13px; font-variant-numeric:tabular-nums; }
+  #lista .vacio { color:var(--mu); }
 </style>
 </head>
 <body>
 <h1>Avisos</h1>
 <p>Para que Claude te avise en este iPhone.</p>
+
+<div class="paso" id="historial" hidden>
+  <strong>Historial</strong>
+  <ul id="lista"></ul>
+  <button id="btnBorrar" class="sec">Borrar historial</button>
+</div>
 
 <div class="paso" id="instalar" hidden>
   <strong>Primero, instálala:</strong>
@@ -53,6 +64,7 @@
   <button id="btnCopiar" class="sec">Copiar</button>
 </div>
 
+<script src="historial.js"></script>
 <script>
 const CLAVE_PUBLICA = "BCZYinwvCV2Uy16QTCdWm2x1rrGnS7XyjatYvl8YxSrwF6l5T_bIYx_6lradPDudQoo0oTnuDQF188SUE_WWOqs";
 const $ = (id) => document.getElementById(id);
@@ -65,6 +77,33 @@ function aBytes(b64) {
 function estado(t, cls) { $("estado").textContent = t; $("estado").className = cls || ""; }
 function mostrarCodigo(sub) { $("txt").value = JSON.stringify(sub); $("codigo").hidden = false; }
 
+function fechaHora(ms) {
+  const f = new Date(ms), hoy = new Date(), ayer = new Date(Date.now() - 864e5);
+  const hora = f.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  if (f.toDateString() === hoy.toDateString()) return "hoy " + hora;
+  if (f.toDateString() === ayer.toDateString()) return "ayer " + hora;
+  return f.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) + " " + hora;
+}
+
+async function pintarHistorial() {
+  $("historial").hidden = false;
+  const ul = $("lista");
+  let avisos = [];
+  try { avisos = await leerAvisos(); } catch (_) {}
+  ul.replaceChildren();
+  if (!avisos.length) {
+    const li = document.createElement("li"); li.className = "vacio"; li.textContent = "Todavía no hay avisos guardados.";
+    ul.append(li); $("btnBorrar").hidden = true; return;
+  }
+  $("btnBorrar").hidden = false;
+  for (const a of avisos) {
+    const li = document.createElement("li"), h = document.createElement("span");
+    h.className = "hora"; h.textContent = fechaHora(a.enviado || a.recibido);
+    li.append(h, a.cuerpo);
+    ul.append(li);
+  }
+}
+
 async function iniciar() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     if (!instalada) { $("instalar").hidden = false; return; }
@@ -73,6 +112,10 @@ async function iniciar() {
   }
   const reg = await navigator.serviceWorker.register("sw.js", { scope: "./" });
   if (!instalada) { $("instalar").hidden = false; return; }
+  reg.update().catch(() => {});
+  pintarHistorial();
+  navigator.serviceWorker.addEventListener("message", (e) => { if (e.data === "nuevo-aviso") pintarHistorial(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pintarHistorial(); });
   $("activar").hidden = false;
   const sub = await reg.pushManager.getSubscription();
   if (sub && Notification.permission === "granted") {
@@ -99,6 +142,11 @@ $("btnProbar").onclick = async () => {
     await reg.showNotification("Prueba local", { body: "Si ves esto, los permisos del iPhone están bien", icon: "icono-192.png" });
     p.textContent = "Permiso: " + Notification.permission + " · notificación enviada (bloquea el teléfono o baja el Centro de notificaciones)";
   } catch (e) { p.textContent = "Error: " + e.message; }
+};
+$("btnBorrar").onclick = async () => {
+  const b = $("btnBorrar");
+  if (b.dataset.seguro !== "1") { b.dataset.seguro = "1"; b.textContent = "Toca otra vez para borrar todo"; return; }
+  await borrarAvisos(); b.dataset.seguro = ""; b.textContent = "Borrar historial"; pintarHistorial();
 };
 $("btnCompartir").onclick = async () => {
   try { await navigator.share({ text: $("txt").value }); } catch (_) {}
