@@ -5,6 +5,13 @@ importScripts("historial.js");
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
+// La app instalada no tiene botón de recargar e iOS guarda la página vieja: se pide siempre la versión
+// recién publicada (sin caché), y solo si no hay red se acepta la guardada.
+self.addEventListener("fetch", (e) => {
+  if (e.request.method !== "GET" || new URL(e.request.url).origin !== self.location.origin) return;
+  e.respondWith(fetch(e.request, { cache: "no-store" }).catch(() => caches.match(e.request).then((r) => r || fetch(e.request))));
+});
+
 self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { cuerpo: e.data ? e.data.text() : "" }; }
